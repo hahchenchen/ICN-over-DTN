@@ -1,0 +1,149 @@
+## begin ionadmin
+# ionrc configuration file for host3 in a 3node ltp test.
+#This uses ltp as the convergence layer.
+#command: % ionadmin host3.ionrc
+#This command should be run FIRST.
+#
+#Soochow University, April 2012
+# Initialization command (command 3).
+#Set this node to be node 3 (as in ipn:3).
+#Use sdr configuration of “ionconfig” file.
+
+1 2 ionconfig
+# start ion node
+s
+# Add some contacts.
+#They will start at +0 seconds from now, ending +86400 seconds from now.
+#They will connect node 1 to node 2, and connect node 2 to node 3.
+#They will transmit 125000 bytes/second.
+#Note that contacts are unidirectional, so order matters.
+
+a contact +0 +86400 1 2 125000
+a contact +0 +86400 2 1 125000
+
+# Add some ranges. These are the physical distance between nodes.
+#They will start at +0 seconds from now, ending +86400 seconds from now.
+#They will connect node 1 to node 2, and connect node 2 to node 3.
+#We will assume every range is one second. Data on the link is expected to take 1 second
+#to reach the other end (One Way Light Time).
+#Note that ranges cover both directions, so you only need define one range for any
+#combination of nodes.
+
+a range +0 +86400 1 2 1
+
+# set this node to consume and produce a mean of 1000000 bytes/second.
+
+m production 1000000
+m consumption 1000000
+m horizon +0
+## end ionadmin
+## begin ionsecadmin
+
+1
+e 1
+## end ionsecadmin
+## begin ltpadmin
+# ltprc configuration file for host1 in a 3node ltp test.
+#Command: % ltpadmin host3.ltprc
+#This command should be run AFTER ionadmin and BEFORE bpadmin.
+#
+#Soochow University, April 2012
+#
+#A warning: the ltp configuration is not ideal in this case.
+#please consult manual pages and other documentation for a better description.
+# Initialization command (command 1).
+# Establishes the LTP retransmission window.
+# (Prohibiting LTP from seizing all available storage).
+#A maximum of 5 sessions. A session is assumed to be around one second of
+#transmission. This value should be estimated at the sum of maximum round-trip
+#times(in seconds) for all "spans." Suggest throwing 20% higher number of sessions
+#to account for extra- long sessions which contain an actual retransmission. Set a total
+#LTP memory space usage limit of 1200000 as the sum of the memory space usage of
+#all spans (more or less the number of bytes in transit on all links for their duration).
+
+1 5 1200000
+# Add a span. (a connection)
+#Identify the span as engine number 2. That is the ipn node number of the node on
+#the other end of this span. Use 5 as the maximum number of export sessions.
+#Use 120000 as the maximum size of an export block. This more or less limits the
+#maximum size of a bundle in the system. The next two items are the maximum
+#number of import sessions and the maximum size of an imported block.
+#Since this is connect, we just copy the export numbers here.
+#1400 is the maximum segment size- more or less, the amount of data that can be
+#held in a single frame of the underlying protocol. In this case, UDP packets are
+#the frame, and we will give a conservative limit.
+#Limit the aggregation size to 120000 bytes, and set a time limit on aggregation to 1
+#second. Use the command 'udplso 10.0.0.4:1113' to implement the link itself.
+#In this case, we use udp to connect to host2 (10.0.0.4 is host2's ipaddr) using port 1113
+#(defined by IANA as the default UDP port for Licklider Transmission Protocol).
+#The single quote is important, don't use double quotes.
+a span 1 5 120000 5 120000 1400 120000 1 'udplso 10.0.0.3:1113'
+# Start command.
+#This command actually runs the link service output commands
+#(defined above, in the "a span" commands).
+#Also starts the link service INPUT task 'udplsi 10.0.0.5:1113' to
+#listen locally on UDP port 1113 for incoming LTP traffic.
+s 'udplsi 10.0.0.5:1113'
+m screening n
+w 1
+## end ltpadmin
+## begin bpadmin
+# bprc configuration file for host3 in a 3node ltp test.
+#Command: % bpadmin host3.bprc
+#This command should be run AFTER ionadmin and ltpadmin and
+#BEFORE ipnadmin or dtnadmin.
+#
+#Soochow University, April 2012
+# Initialization command (command 1).
+
+1
+
+# Add an EID scheme.
+#The scheme's name is ipn.
+#This scheme's forwarding engine is handled by the program 'ipnfw.'
+#This scheme's administration program (acting as the custodian daemon) is 'ipnadminep.'
+
+a scheme ipn 'ipnfw' 'ipnadminep'
+
+# Add endpoints.
+#Establish endpoints ipn:3.1 and ipn:3.2 on the local node.
+#The behavior for receiving a bundle when there is no application currently accepting
+#bundles, is to queue them 'q', as opposed to immediately and silently discarding
+#them (use 'x' instead of 'q' to discard).
+#Note that the custodian endpoint ipn:3.0 is automatically generated.
+a endpoint ipn:2.0 q
+a endpoint ipn:2.1 q
+a endpoint ipn:2.2 q
+# Add a protocol.
+#Add the protocol named ltp.
+#Estimate transmission capacity assuming 1400 bytes of each frame (in this case, udp
+#on ethernet) for payload, and 100 bytes for overhead.
+a protocol ltp 1400 100
+# Add an induct. (listen)
+#Add an induct to accept bundles using the ltp protocol.
+#The duct's name is 3 (this is for future changing/deletion of the induct).
+#The induct itself is implemented by the 'ltpcli' command.
+a induct ltp 2 ltpcli
+# Add an outduct. (send to host2)
+#Add an outduct to send bundles using the ltp protocol.
+#The duct's name is 2(this is for future changing/deletion of the outduct).
+#The outduct itself is implemented by the 'ltpclo' command.
+a outduct ltp 1 ltpclo
+#Start bundle protocol engine, also running all of the induct, outduct, and
+#administration programs defined above
+s
+#w 1
+## end bpadmin
+## begin ipnadmin
+# ipnrc configuration file for host3 in a 3node ltp test.
+#Essentially, this is the IPN scheme's routing table.
+#Command: % ipnadmin host1.ipnrc
+#This command should be run AFTER bpadmin (likely to be run last).
+#
+#Soochow University, April 2012
+# Add an egress plan.
+#Bundles to be transmitted to element number 2 can be transmitted directly to host2
+#using ltp outduct identified as ‘2.’
+#See your bprc file or bpadmin for outducts/protocols you can use.
+a plan 1 ltp/1
+## end ipnadmin
