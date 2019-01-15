@@ -1255,7 +1255,7 @@ ccnl_do_ageing(void *ptr, void *dummy)
                 DEBUGMSG_AGEING("AGING: REMOVE INTEREST", "timeout: remove interest");
                 i = ccnl_nfn_interest_remove(relay, i);
 #endif
-        } else {
+        } else if((i->last_used + CCNL_INTEREST_TIMEOUT) <= t){
             // CONFORM: "A node MUST retransmit Interest Messages
             // periodically for pending PIT entries."
             char *s = NULL;
@@ -1274,6 +1274,9 @@ ccnl_do_ageing(void *ptr, void *dummy)
             i->retries++;
             i = i->next;
         }
+      else {
+       i = i->next;
+      }
     }
     while (f) {
         if (!(f->flags & CCNL_FACE_FLAGS_STATIC) &&
